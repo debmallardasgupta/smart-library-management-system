@@ -4,6 +4,3 @@ Tech Stack:
 - Python
 - Flask
 - SQL
-
-Status:
-- Day 1 : Project Setup
