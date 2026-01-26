@@ -1,13 +1,17 @@
-from flask import Blueprint, jsonify, abort
+from flask import Blueprint, request, jsonify
+from models.user import create_user, get_all_users
 
-user_bp = Blueprint("user", __name__)
+user_bp = Blueprint("users", __name__)
 
-@user_bp.route("/<int:user_id>", methods=["GET"])
-def get_user(user_id):
-    if user_id <= 0:
-        abort(400)
+@user_bp.route("/users", methods=["POST"])
+def add_user():
+    data = request.json
+    if not data or "name" not in data or "email" not in data:
+        return {"error": "Invalid input"}, 400
 
-    return jsonify({
-        "id": user_id,
-        "name": f"User{user_id}"
-    })
+    create_user(data["name"], data["email"])
+    return {"message": "User added"}, 201
+
+@user_bp.route("/users", methods=["GET"])
+def fetch_users():
+    return jsonify(get_all_users())

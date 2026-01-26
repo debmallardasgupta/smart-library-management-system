@@ -1,12 +1,15 @@
-import sqlite3
+from flask import Flask
+from routes.user import user_bp
+from routes.health import health_bp
 
-conn = sqlite3.connect("dev.db")
-cursor = conn.cursor()
+def create_app():
+    app = Flask(__name__)
 
-cursor.execute("SELECT * FROM users")
-rows = cursor.fetchall()
+    app.register_blueprint(health_bp)
+    app.register_blueprint(user_bp)
 
-for row in rows:
-    print(row)
+    return app
 
-conn.close()
+if __name__ == "__main__":
+    app = create_app()
+    app.run(debug=True)
