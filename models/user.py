@@ -1,23 +1,34 @@
-import sqlite3
-from config import DATABASE
+def get_user_by_id(user_id):
+    conn = get_connection()
+    user = conn.execute(
+        "SELECT * FROM users WHERE id = ?",
+        (user_id,)
+    ).fetchone()
+    conn.close()
+    return dict(user) if user else None
 
-def get_connection():
-    conn = sqlite3.connect(DATABASE)
-    conn.row_factory = sqlite3.Row
-    return conn
 
-def create_user(name, email):
+def update_user(user_id, name, email):
     conn = get_connection()
     cur = conn.cursor()
     cur.execute(
-        "INSERT INTO users (name, email) VALUES (?, ?)",
-        (name, email)
+        "UPDATE users SET name = ?, email = ? WHERE id = ?",
+        (name, email, user_id)
     )
     conn.commit()
+    affected = cur.rowcount
     conn.close()
+    return affected
 
-def get_all_users():
+
+def delete_user(user_id):
     conn = get_connection()
-    users = conn.execute("SELECT * FROM users").fetchall()
+    cur = conn.cursor()
+    cur.execute(
+        "DELETE FROM users WHERE id = ?",
+        (user_id,)
+    )
+    conn.commit()
+    affected = cur.rowcount
     conn.close()
-    return [dict(user) for user in users]
+    return affected
