@@ -2,11 +2,13 @@ from flask import Blueprint, jsonify, request
 
 from extensions import db
 from models.book import Book
+from utils.decorators import token_required
 
 book_bp = Blueprint("books", __name__, url_prefix="/api/books")
 
 
 @book_bp.route("", methods=["POST"])
+@token_required
 def create_book():
     data = request.get_json(silent=True) or {}
 
@@ -48,6 +50,7 @@ def get_book(book_id):
 
 
 @book_bp.route("/<int:book_id>", methods=["PUT"])
+@token_required
 def update_book(book_id):
     book = Book.query.get(book_id)
     if not book:
@@ -68,6 +71,7 @@ def update_book(book_id):
 
 
 @book_bp.route("/<int:book_id>", methods=["DELETE"])
+@token_required
 def delete_book(book_id):
     book = Book.query.get(book_id)
     if not book:
