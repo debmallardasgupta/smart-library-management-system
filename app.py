@@ -2,7 +2,7 @@ from flask import Flask, jsonify
 
 from config import Config
 from extensions import db
-from routes import book_bp
+from routes import auth_bp, book_bp
 
 
 def create_app():
@@ -11,6 +11,7 @@ def create_app():
 
     db.init_app(app)
     app.register_blueprint(book_bp)
+    app.register_blueprint(auth_bp)
 
     @app.route("/")
     def index():
