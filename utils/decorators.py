@@ -1,8 +1,9 @@
 from functools import wraps
 
 import jwt
-from flask import jsonify, request
+from flask import request
 
+from utils.errors import APIError
 from utils.jwt_utils import decode_token
 
 
@@ -12,16 +13,16 @@ def token_required(f):
         auth_header = request.headers.get("Authorization", "")
 
         if not auth_header.startswith("Bearer "):
-            return jsonify({"error": "Missing or malformed Authorization header"}), 401
+            raise APIError("Missing or malformed Authorization header", status_code=401)
 
         token = auth_header.split(" ", 1)[1]
 
         try:
             payload = decode_token(token)
         except jwt.ExpiredSignatureError:
-            return jsonify({"error": "Token has expired"}), 401
+            raise APIError("Token has expired", status_code=401)
         except jwt.InvalidTokenError:
-            return jsonify({"error": "Invalid token"}), 401
+            raise APIError("Invalid token", status_code=401)
 
         request.current_user = {"id": payload["user_id"], "role": payload["role"]}
         return f(*args, **kwargs)
@@ -34,7 +35,7 @@ def admin_required(f):
     @token_required
     def decorated(*args, **kwargs):
         if request.current_user.get("role") != "admin":
-            return jsonify({"error": "Admin privileges required"}), 403
+            raise APIError("Admin privileges required", status_code=403)
         return f(*args, **kwargs)
 
     return decorated
