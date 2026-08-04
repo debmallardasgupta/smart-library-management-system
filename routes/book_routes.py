@@ -2,27 +2,34 @@ from flask import Blueprint, jsonify, request
 
 from extensions import db
 from models.book import Book
+from schemas import book_create_schema, book_update_schema
 from utils.decorators import token_required
+from utils.errors import APIError
+from utils.validation import validate_payload
 
 book_bp = Blueprint("books", __name__, url_prefix="/api/books")
+
+
+def get_book_or_404(book_id):
+    book = Book.query.get(book_id)
+    if not book:
+        raise APIError("Book not found", status_code=404)
+    return book
 
 
 @book_bp.route("", methods=["POST"])
 @token_required
 def create_book():
-    data = request.get_json(silent=True) or {}
+    data = validate_payload(book_create_schema, request.get_json(silent=True))
 
-    title = data.get("title")
-    author = data.get("author")
+    if data.get("isbn") and Book.query.filter_by(isbn=data["isbn"]).first():
+        raise APIError("A book with this ISBN already exists", status_code=409)
 
-    if not title or not author:
-        return jsonify({"error": "title and author are required"}), 400
-
-    total_copies = data.get("total_copies", 1)
+    total_copies = data["total_copies"]
 
     book = Book(
-        title=title,
-        author=author,
+        title=data["title"],
+        author=data["author"],
         isbn=data.get("isbn"),
         genre=data.get("genre"),
         total_copies=total_copies,
@@ -43,27 +50,24 @@ def get_books():
 
 @book_bp.route("/<int:book_id>", methods=["GET"])
 def get_book(book_id):
-    book = Book.query.get(book_id)
-    if not book:
-        return jsonify({"error": "Book not found"}), 404
+    book = get_book_or_404(book_id)
     return jsonify(book.to_dict()), 200
 
 
 @book_bp.route("/<int:book_id>", methods=["PUT"])
 @token_required
 def update_book(book_id):
-    book = Book.query.get(book_id)
-    if not book:
-        return jsonify({"error": "Book not found"}), 404
+    book = get_book_or_404(book_id)
+    data = validate_payload(book_update_schema, request.get_json(silent=True))
 
-    data = request.get_json(silent=True) or {}
+    if "available_copies" in data and "total_copies" in data:
+        if data["available_copies"] > data["total_copies"]:
+            raise APIError("available_copies cannot exceed total_copies", status_code=400)
+    elif "available_copies" in data and data["available_copies"] > book.total_copies:
+        raise APIError("available_copies cannot exceed total_copies", status_code=400)
 
-    book.title = data.get("title", book.title)
-    book.author = data.get("author", book.author)
-    book.isbn = data.get("isbn", book.isbn)
-    book.genre = data.get("genre", book.genre)
-    book.total_copies = data.get("total_copies", book.total_copies)
-    book.available_copies = data.get("available_copies", book.available_copies)
+    for field, value in data.items():
+        setattr(book, field, value)
 
     db.session.commit()
 
@@ -73,9 +77,7 @@ def update_book(book_id):
 @book_bp.route("/<int:book_id>", methods=["DELETE"])
 @token_required
 def delete_book(book_id):
-    book = Book.query.get(book_id)
-    if not book:
-        return jsonify({"error": "Book not found"}), 404
+    book = get_book_or_404(book_id)
 
     db.session.delete(book)
     db.session.commit()
