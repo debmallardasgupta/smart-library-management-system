@@ -5,26 +5,38 @@ from flask import Blueprint, jsonify, request
 from extensions import db
 from models.book import Book
 from models.loan import Loan
+from schemas import borrow_schema
 from utils.decorators import token_required
+from utils.errors import APIError
+from utils.validation import validate_payload
 
 loan_bp = Blueprint("loans", __name__, url_prefix="/api/loans")
+
+
+def get_loan_or_404(loan_id):
+    loan = Loan.query.get(loan_id)
+    if not loan:
+        raise APIError("Loan not found", status_code=404)
+    return loan
+
+
+def ensure_owner_or_admin(loan):
+    if loan.user_id != request.current_user["id"] and request.current_user["role"] != "admin":
+        raise APIError("You can only access your own loans", status_code=403)
 
 
 @loan_bp.route("/borrow", methods=["POST"])
 @token_required
 def borrow_book():
-    data = request.get_json(silent=True) or {}
-    book_id = data.get("book_id")
-
-    if not book_id:
-        return jsonify({"error": "book_id is required"}), 400
+    data = validate_payload(borrow_schema, request.get_json(silent=True))
+    book_id = data["book_id"]
 
     book = Book.query.get(book_id)
     if not book:
-        return jsonify({"error": "Book not found"}), 404
+        raise APIError("Book not found", status_code=404)
 
     if book.available_copies <= 0:
-        return jsonify({"error": "No copies available to borrow"}), 409
+        raise APIError("No copies available to borrow", status_code=409)
 
     user_id = request.current_user["id"]
 
@@ -32,7 +44,7 @@ def borrow_book():
         book_id=book_id, user_id=user_id, status="borrowed"
     ).first()
     if already_borrowed:
-        return jsonify({"error": "You already have this book borrowed"}), 409
+        raise APIError("You already have this book borrowed", status_code=409)
 
     loan = Loan(book_id=book_id, user_id=user_id)
     book.available_copies -= 1
@@ -46,15 +58,11 @@ def borrow_book():
 @loan_bp.route("/<int:loan_id>/return", methods=["POST"])
 @token_required
 def return_book(loan_id):
-    loan = Loan.query.get(loan_id)
-    if not loan:
-        return jsonify({"error": "Loan not found"}), 404
-
-    if loan.user_id != request.current_user["id"] and request.current_user["role"] != "admin":
-        return jsonify({"error": "You can only return your own loans"}), 403
+    loan = get_loan_or_404(loan_id)
+    ensure_owner_or_admin(loan)
 
     if loan.status == "returned":
-        return jsonify({"error": "This loan has already been returned"}), 409
+        raise APIError("This loan has already been returned", status_code=409)
 
     loan.status = "returned"
     loan.returned_at = datetime.utcnow()
@@ -82,11 +90,6 @@ def list_loans():
 @loan_bp.route("/<int:loan_id>", methods=["GET"])
 @token_required
 def get_loan(loan_id):
-    loan = Loan.query.get(loan_id)
-    if not loan:
-        return jsonify({"error": "Loan not found"}), 404
-
-    if loan.user_id != request.current_user["id"] and request.current_user["role"] != "admin":
-        return jsonify({"error": "You can only view your own loans"}), 403
-
+    loan = get_loan_or_404(loan_id)
+    ensure_owner_or_admin(loan)
     return jsonify(loan.to_dict()), 200
