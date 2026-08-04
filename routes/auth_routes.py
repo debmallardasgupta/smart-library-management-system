@@ -2,31 +2,27 @@ from flask import Blueprint, jsonify, request
 
 from extensions import db
 from models.user import User
+from schemas import login_schema, register_schema
 from utils.decorators import token_required
+from utils.errors import APIError
 from utils.jwt_utils import generate_token
+from utils.validation import validate_payload
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/api/auth")
 
 
 @auth_bp.route("/register", methods=["POST"])
 def register():
-    data = request.get_json(silent=True) or {}
+    data = validate_payload(register_schema, request.get_json(silent=True))
 
-    username = data.get("username")
-    email = data.get("email")
-    password = data.get("password")
+    if User.query.filter_by(username=data["username"]).first():
+        raise APIError("Username already taken", status_code=409)
 
-    if not username or not email or not password:
-        return jsonify({"error": "username, email and password are required"}), 400
+    if User.query.filter_by(email=data["email"]).first():
+        raise APIError("Email already registered", status_code=409)
 
-    if User.query.filter_by(username=username).first():
-        return jsonify({"error": "Username already taken"}), 409
-
-    if User.query.filter_by(email=email).first():
-        return jsonify({"error": "Email already registered"}), 409
-
-    user = User(username=username, email=email, role=data.get("role", "member"))
-    user.set_password(password)
+    user = User(username=data["username"], email=data["email"], role=data["role"])
+    user.set_password(data["password"])
 
     db.session.add(user)
     db.session.commit()
@@ -36,18 +32,12 @@ def register():
 
 @auth_bp.route("/login", methods=["POST"])
 def login():
-    data = request.get_json(silent=True) or {}
+    data = validate_payload(login_schema, request.get_json(silent=True))
 
-    username = data.get("username")
-    password = data.get("password")
+    user = User.query.filter_by(username=data["username"]).first()
 
-    if not username or not password:
-        return jsonify({"error": "username and password are required"}), 400
-
-    user = User.query.filter_by(username=username).first()
-
-    if not user or not user.check_password(password):
-        return jsonify({"error": "Invalid username or password"}), 401
+    if not user or not user.check_password(data["password"]):
+        raise APIError("Invalid username or password", status_code=401)
 
     token = generate_token(user.id, user.role)
 
@@ -59,5 +49,5 @@ def login():
 def me():
     user = User.query.get(request.current_user["id"])
     if not user:
-        return jsonify({"error": "User not found"}), 404
+        raise APIError("User not found", status_code=404)
     return jsonify(user.to_dict()), 200
