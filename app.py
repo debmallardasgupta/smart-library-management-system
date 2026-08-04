@@ -1,4 +1,4 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, render_template
 
 from config import Config
 from extensions import db
@@ -15,7 +15,11 @@ def create_app():
     app.register_blueprint(loan_bp)
 
     @app.route("/")
-    def index():
+    def dashboard():
+        return render_template("index.html")
+
+    @app.route("/api/health")
+    def health():
         return jsonify({
             "message": "Smart Library Management System API",
             "status": "running",
